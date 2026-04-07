@@ -19,6 +19,8 @@ from langchain.memory import ConversationBufferMemory
 
 load_dotenv()
 app = FastAPI(title="RAG Application")
+if not os.getenv("GROQ_API_KEY"):
+    raise ValueError("GROQ_API_KEY not set in environment variables")
 
 # --------------- Upgrade 12: Structured Logging ---------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -30,20 +32,41 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 FAISS_DIR = "faiss_index"
 
 ALLOWED_EXTENSIONS = {".pdf", ".txt"}
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embeddings = None
+vector_store = None
 
 # Upgrade 6 & 9: Conversation Memory & Query Caching
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True, output_key="answer")
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True,
+    output_key="answer",
+    k=5
+)
 query_cache: dict = {}
 
-# Upgrade 2: Persist the FAISS Index (Load on startup)
-if Path(FAISS_DIR).exists():
-    logger.info("Loading existing FAISS index from disk...")
-    vector_store = FAISS.load_local(FAISS_DIR, embeddings, allow_dangerous_deserialization=True)
-else:
-    logger.info("No existing FAISS index found. Starting fresh.")
-    vector_store = None
+def get_embeddings():
+    """Lazy load embeddings to save memory on startup."""
+    global embeddings
+    if embeddings is None:
+        logger.info("Loading embeddings...")
+        embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    return embeddings
 
+def get_vector_store():
+    """Lazy load or retrieve the FAISS vector store."""
+    global vector_store
+    if vector_store is None:
+        if Path(FAISS_DIR).exists():
+            logger.info("Loading existing FAISS index...")
+            vector_store = FAISS.load_local(
+                FAISS_DIR,
+                get_embeddings(),
+                allow_dangerous_deserialization=True
+            )
+        else:
+            logger.info("No FAISS index found.")
+            vector_store = None
+    return vector_store
 
 # --------------- helpers ---------------
 def load_document(file_path: str):
@@ -61,12 +84,12 @@ def build_vector_store(documents):
     """Split documents into chunks and build a FAISS vector store."""
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_documents(documents)
-    store = FAISS.from_documents(chunks, embeddings)
+    store = FAISS.from_documents(chunks, get_embeddings())
     return store
 
 def get_qa_chain(store, k: int = 3):
     """Create a ConversationalRetrievalQA chain from the vector store."""
-    llm = ChatGroq(model_name="llama3-8b-8192")
+    llm = ChatGroq(model_name="llama3-8b-8192",groq_api_key=os.getenv("GROQ_API_KEY"))
     
     # Upgrade 1: Prompt Templating
     prompt_template = """Use the following pieces of context to answer the question at the end. 
@@ -141,11 +164,12 @@ async def upload_document(file: UploadFile = File(...)):
         docs = load_document(str(file_path))
         new_store = build_vector_store(docs)
         
-        # Multi-document Support
-        if vector_store is None:
+        current_store = get_vector_store()
+        if current_store is None:
             vector_store = new_store
         else:
-            vector_store.merge_from(new_store)
+            current_store.merge_from(new_store)
+            vector_store = current_store
             
         # Upgrade 2: Persist the FAISS Index after merging
         vector_store.save_local(FAISS_DIR)
@@ -160,7 +184,9 @@ async def upload_document(file: UploadFile = File(...)):
 
 @app.post("/query")
 async def query_document(req: QueryRequest):
-    if vector_store is None:
+    store = get_vector_store()
+
+    if store is None:  
         raise HTTPException(
             status_code=400, 
             detail="No documents uploaded yet. Please upload a document first."
@@ -172,12 +198,12 @@ async def query_document(req: QueryRequest):
         logger.info("Serving query from cache.")
         return query_cache[cache_key]
         
-    qa_chain = get_qa_chain(vector_store, k=req.k)
+    qa_chain = get_qa_chain(store, k=req.k)
     
     try:
         logger.info(f"Processing query: {req.question}")
-        res = qa_chain.invoke({"question": req.question})
-        
+        res = qa_chain.invoke({"question": req.question},config={"timeout": 20}
+
         answer = res.get("answer", "")
         source_docs = res.get("source_documents", [])
         
@@ -204,12 +230,13 @@ async def stream_query_document(req: QueryRequest):
     Alternative endpoint that streams the LLM response token by token.
     Note: Calling this endpoint will return raw text chunks instead of JSON.
     """
-    if vector_store is None:
+    store = get_vector_store()
+    if store is None:
         raise HTTPException(status_code=400, detail="No documents uploaded yet.")
     
     # Reinitialize a chain specifically for streaming
     llm_streaming = ChatGroq(model_name="llama3-8b-8192", streaming=True)
-    retriever = vector_store.as_retriever(search_kwargs={"k": req.k})
+    retriever = store.as_retriever(search_kwargs={"k": req.k})
     
     prompt_template = """Use the following context to answer the question. \n\nContext: {context}\n\nQuestion: {question}\nAnswer:"""
     PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
@@ -222,12 +249,14 @@ async def stream_query_document(req: QueryRequest):
     )
 
     async def generate_response():
+        logger.info("Streaming response started...")
         async for chunk in chain.astream({"question": req.question}):
             # Yield answer tokens as they arrive
             if "answer" in chunk:
                 yield chunk["answer"]
 
     return StreamingResponse(generate_response(), media_type="text/plain")
+
 
 @app.delete("/history")
 async def clear_memory():
@@ -236,8 +265,3 @@ async def clear_memory():
     query_cache.clear()
     logger.info("Cleared conversation memory and cache.")
     return {"message": "Memory and cache cleared."}
-
-@app.get("/", response_class=HTMLResponse)
-def home():
-    with open("static/index.html") as f:
-        return f.read()
