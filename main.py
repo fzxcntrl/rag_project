@@ -82,7 +82,7 @@ def load_document(file_path: str):
 
 def build_vector_store(documents):
     """Split documents into chunks and build a FAISS vector store."""
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=400,chunk_overlap=50)
     chunks = text_splitter.split_documents(documents)
     store = FAISS.from_documents(chunks, get_embeddings())
     return store
@@ -156,20 +156,37 @@ async def upload_document(file: UploadFile = File(...)):
             detail=f"Unsupported file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"
         )
 
+
     file_path = UPLOAD_DIR / file.filename
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    try:
-        docs = load_document(str(file_path))
-        new_store = build_vector_store(docs)
-        
-        current_store = get_vector_store()
-        if current_store is None:
-            vector_store = new_store
-        else:
-            current_store.merge_from(new_store)
-            vector_store = current_store
+with open(file_path, "wb") as buffer:
+    shutil.copyfileobj(file.file, buffer)
+
+try:
+    logger.info("STEP 1: Loading document...")
+    docs = load_document(str(file_path))
+
+    logger.info("STEP 2: Splitting + embedding...")
+    new_store = build_vector_store(docs)
+
+    logger.info("STEP 3: Merging vector store...")
+    current_store = get_vector_store()
+
+    if current_store is None:
+        vector_store = new_store
+    else:
+        current_store.merge_from(new_store)
+        vector_store = current_store
+
+    logger.info("STEP 4: Saving FAISS index...")
+    vector_store.save_local(FAISS_DIR)
+
+    logger.info(f"SUCCESS: {file.filename} indexed")
+
+    return {"message": f"Successfully uploaded and indexed '{file.filename}'."}
+
+except Exception as e:
+    logger.exception(f"Error processing upload for {file.filename}")
+    raise HTTPException(status_code=500, detail=str(e))
             
         # Upgrade 2: Persist the FAISS Index after merging
         vector_store.save_local(FAISS_DIR)
@@ -235,7 +252,11 @@ async def stream_query_document(req: QueryRequest):
         raise HTTPException(status_code=400, detail="No documents uploaded yet.")
     
     # Reinitialize a chain specifically for streaming
-    llm_streaming = ChatGroq(model_name="llama3-8b-8192", streaming=True)
+    llm_streaming = ChatGroq(
+    model_name="llama3-8b-8192",
+    groq_api_key=os.getenv("GROQ_API_KEY"),
+    streaming=True
+)
     retriever = store.as_retriever(search_kwargs={"k": req.k})
     
     prompt_template = """Use the following context to answer the question. \n\nContext: {context}\n\nQuestion: {question}\nAnswer:"""
