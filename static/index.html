@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document Intelligence</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-gradient: linear-gradient(135deg, #f0f4ff 0%, #e5e7eb 100%);
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --radius: 16px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: var(--bg-gradient); 
+            color: var(--text-main); 
+            min-height: 100vh; 
+            display: flex; 
+            justify-content: center; 
+            padding: 40px 20px; 
+            line-height: 1.5;
+        }
+        
+        .container { 
+            max-width: 800px; 
+            width: 100%; 
+        }
+        
+        h1 { 
+            text-align: center; 
+            margin-bottom: 32px; 
+            font-size: 2.2rem;
+            font-weight: 600;
+            color: var(--primary);
+            letter-spacing: -0.02em;
+        }
+
+        .card { 
+            background: var(--card-bg); 
+            border-radius: var(--radius); 
+            padding: 32px; 
+            margin-bottom: 24px; 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05); 
+            border: 1px solid rgba(255,255,255,0.5);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .card h2 { 
+            font-size: 1.25rem; 
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card p.subtitle {
+            margin-bottom: 20px; 
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Custom File Upload Styling */
+        .file-upload-wrapper {
+            position: relative;
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            background: #f8fafc;
+            transition: all 0.2s ease;
+            margin-bottom: 16px;
+            cursor: pointer;
+        }
+
+        .file-upload-wrapper:hover {
+            border-color: var(--primary);
+            background: #f0f4ff;
+        }
+
+        input[type="file"] { 
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-upload-text {
+            font-weight: 500;
+            color: var(--primary);
+        }
+
+        /* Document List Tags */
+        #document-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .doc-badge {
+            background: #e0e7ff;
+            color: var(--primary);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Inputs & Buttons */
+        input[type="text"] { 
+            width: 100%; 
+            padding: 14px 16px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 10px; 
+            font-size: 1rem; 
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #f9fafb;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+            background: #fff;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        button { 
+            padding: 14px 24px; 
+            border: none; 
+            border-radius: 10px; 
+            background: var(--primary); 
+            color: #fff; 
+            font-size: 1rem; 
+            font-weight: 500;
+            cursor: pointer; 
+            transition: all 0.2s; 
+            font-family: inherit;
+            white-space: nowrap;
+        }
+        
+        button:hover:not(:disabled) { 
+            background: var(--primary-hover); 
+            transform: translateY(-1px);
+        }
+        
+        button:disabled { 
+            opacity: 0.6; 
+            cursor: not-allowed; 
+        }
+
+        button.btn-secondary {
+            background: #f1f5f9;
+            color: #475569;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+        }
+
+        button.btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        /* Advanced Settings */
+        .advanced-settings {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 16px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .advanced-settings input[type="number"] {
+            width: 60px;
+            padding: 6px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-family: inherit;
+        }
+
+        /* Status & Feedback */
+        .status { 
+            margin-top: 16px; 
+            padding: 12px 16px; 
+            border-radius: 8px; 
+            display: none; 
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+        .status.success { display: block; background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;}
+        .status.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;}
+
+        /* Answer Area */
+        #answer-box { 
+            margin-top: 24px; 
+            white-space: pre-wrap; 
+            font-size: 1.05rem;
+            color: #374151;
+        }
+
+        #answer-box:empty { display: none; }
+
+        /* Sources Area */
+        #sources {
+            margin-top: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .source-label { 
+            font-weight: 600; 
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .source { 
+            background: #f8fafc; 
+            padding: 16px; 
+            border-radius: 10px; 
+            font-size: 0.9rem; 
+            color: #475569;
+            border-left: 4px solid var(--primary);
+            line-height: 1.6;
+        }
+
+        /* Animated Spinner */
+        .loader-container {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            margin-top: 24px;
+            gap: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Document Intelligence</h1>
+
+    <div class="card">
+        <h2>Knowledge Base</h2>
+        <p class="subtitle">Upload a <b>.pdf</b> or <b>.txt</b> file to train the AI on your specific data.</p>
+        
+        <div class="file-upload-wrapper">
+            <span class="file-upload-text" id="file-name-display">Click to browse or drag file here</span>
+            <input type="file" id="file-input" accept=".pdf,.txt" onchange="updateFileName()" />
+        </div>
+        
+        <button id="upload-btn" onclick="uploadFile()">Process Document</button>
+        <div id="upload-status" class="status"></div>
+
+        <div id="document-list">
+            <span style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">Fetching uploaded documents...</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>✨ Ask the Assistant</h2>
+            <button class="btn-secondary" onclick="clearHistory()">Clear Memory</button>
+        </div>
+        
+        <p class="subtitle">Ask questions based on the documents you just uploaded.</p>
+        
+        <div class="input-group">
+            <input type="text" id="question" placeholder="e.g., What is the main conclusion of the report?" autocomplete="off" />
+            <button id="ask-btn" onclick="askQuestion()">Generate</button>
+        </div>
+
+        <div class="advanced-settings">
+            <label for="k-value">Retrieval chunks (k):</label>
+            <input type="number" id="k-value" value="3" min="1" max="10" />
+            <span style="font-size: 0.8rem;">(Higher = more context, slower response)</span>
+        </div>
+        
+        <div class="loader-container" id="loader">
+            <div class="spinner"></div>
+            <span>Analyzing documents...</span>
+        </div>
+        
+        <div id="answer-box"></div>
+        <div id="sources"></div>
+    </div>
+</div>
+
+<script>
+    // Fetch and display uploaded documents on page load
+    window.onload = fetchDocuments;
+
+    async function fetchDocuments() {
+        const docList = document.getElementById('document-list');
+        try {
+            const res = await fetch('/documents');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.documents && data.documents.length > 0) {
+                    docList.innerHTML = data.documents.map(doc => 
+                        `<div class="doc-badge">📄 ${doc}</div>`
+                    ).join('');
+                } else {
+                    docList.innerHTML = `<span style="color: var(--text-muted); font-size: 0.9rem;">No documents indexed yet.</span>`;
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load documents", err);
+        }
+    }
+
+    async function clearHistory() {
+        if (!confirm("Are you sure you want to clear the conversation memory?")) return;
+        
+        try {
+            await fetch('/history', { method: 'DELETE' });
+            document.getElementById('answer-box').textContent = '';
+            document.getElementById('sources').innerHTML = '';
+            document.getElementById('question').value = '';
+            
+            // Brief visual feedback
+            const btn = document.querySelector('.btn-secondary');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "Cleared!";
+            setTimeout(() => btn.innerHTML = originalText, 2000);
+        } catch (err) {
+            alert("Error clearing history.");
+        }
+    }
+
+    // Visual helper to show the selected file name
+    function updateFileName() {
+        const input = document.getElementById('file-input');
+        const display = document.getElementById('file-name-display');
+        if (input.files && input.files.length > 0) {
+            display.textContent = "Selected: " + input.files[0].name;
+            display.style.color = "#1f2937";
+        } else {
+            display.textContent = "Click to browse or drag file here";
+            display.style.color = "";
+        }
+    }
+
+    async function uploadFile() {
+        const fileInput = document.getElementById('file-input');
+        const status = document.getElementById('upload-status');
+        const uploadBtn = document.getElementById('upload-btn');
+        
+        status.className = 'status';
+        status.style.display = 'none';
+
+        if (!fileInput.files.length) {
+            status.textContent = 'Please select a file first.';
+            status.className = 'status error';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Processing...';
+
+        try {
+            const res = await fetch('/upload', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (res.ok) {
+                status.textContent = data.message;
+                status.className = 'status success';
+                
+                // Refresh the document list after successful upload
+                fetchDocuments();
+                
+                // Reset file input
+                fileInput.value = "";
+                updateFileName();
+            } else {
+                status.textContent = data.detail || 'Upload failed.';
+                status.className = 'status error';
+            }
+        } catch (err) {
+            status.textContent = 'Network error: ' + err.message;
+            status.className = 'status error';
+        }
+        
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Process Document';
+    }
+
+    async function askQuestion() {
+        const question = document.getElementById('question').value.trim();
+        const kValue = document.getElementById('k-value').value;
+        const answerBox = document.getElementById('answer-box');
+        const sourcesBox = document.getElementById('sources');
+        const loader = document.getElementById('loader');
+        const askBtn = document.getElementById('ask-btn');
+
+        answerBox.textContent = '';
+        sourcesBox.innerHTML = '';
+
+        if (!question) return;
+
+        loader.style.display = 'flex';
+        askBtn.disabled = true;
+
+        try {
+            const res = await fetch('/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    question: question,
+                    k: parseInt(kValue) || 3 
+                }),
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                answerBox.textContent = data.answer;
+
+                if (data.sources && data.sources.length) {
+                    const heading = document.createElement('div');
+                    heading.className = 'source-label';
+                    heading.textContent = 'Information Extracted From:';
+                    sourcesBox.appendChild(heading);
+
+                    data.sources.forEach((s, i) => {
+                        const div = document.createElement('div');
+                        div.className = 'source';
+                        div.textContent = `[${i + 1}] ${s.content}`;
+                        sourcesBox.appendChild(div);
+                    });
+                }
+            } else {
+                answerBox.textContent = (data.detail || 'Something went wrong.');
+                answerBox.style.color = '#991b1b';
+            }
+        } catch (err) {
+            answerBox.textContent = 'Network error: ' + err.message;
+            answerBox.style.color = '#991b1b';
+        }
+
+        loader.style.display = 'none';
+        askBtn.disabled = false;
+        answerBox.style.color = ''; 
+    }
+
+    // Allow pressing Enter to ask
+    document.getElementById('question').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') askQuestion();
+    });
+</script>
+</body>
+</html>
