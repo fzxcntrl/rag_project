@@ -236,3 +236,8 @@ async def clear_memory():
     query_cache.clear()
     logger.info("Cleared conversation memory and cache.")
     return {"message": "Memory and cache cleared."}
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    with open("static/index.html") as f:
+        return f.read()
