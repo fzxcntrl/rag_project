@@ -202,7 +202,7 @@ async def query_document(req: QueryRequest):
     
     try:
         logger.info(f"Processing query: {req.question}")
-        res = qa_chain.invoke({"question": req.question},config={"timeout": 20}
+        res = qa_chain.invoke({"question": req.question},config={"timeout": 20})
 
         answer = res.get("answer", "")
         source_docs = res.get("source_documents", [])
