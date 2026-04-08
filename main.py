@@ -30,7 +30,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
     raise ValueError("GROQ_API_KEY not set in environment variables")
 
-MODEL_NAME = os.getenv("GROQ_MODEL", "llama3-8b-8192")
+MODEL_NAME = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
 FAISS_DIR = DATA_DIR / "faiss_index"
