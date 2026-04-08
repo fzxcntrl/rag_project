@@ -11,14 +11,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
-
-
-
+from fastembed import TextEmbedding
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
+from langchain_core.embeddings import Embeddings
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_groq import ChatGroq
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -45,13 +43,10 @@ ALLOWED_EXTENSIONS = {".pdf", ".txt"}
 
 app = FastAPI(title="RAG Application")
 
-# Process-wide state.
 embeddings = None
 vector_store = None
 store_lock = asyncio.Lock()
 
-# Note: this memory is shared across all users of the process.
-# For a real multi-user app, move memory/chat history to per-user session storage.
 memory = ConversationBufferMemory(
     memory_key="chat_history",
     return_messages=True,
@@ -65,11 +60,22 @@ class QueryRequest(BaseModel):
     k: int = 3
 
 
-def get_embeddings() -> FastEmbedEmbeddings:
+class LocalFastEmbedEmbeddings(Embeddings):
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
+        self.model = TextEmbedding(model_name=model_name)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [list(vec) for vec in self.model.embed(texts)]
+
+    def embed_query(self, text: str) -> list[float]:
+        return list(next(self.model.embed([text])))
+
+
+def get_embeddings() -> LocalFastEmbedEmbeddings:
     global embeddings
     if embeddings is None:
-        logger.info("Loading FastEmbed embeddings...")
-        embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+        logger.info("Loading FastEmbed model...")
+        embeddings = LocalFastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
     return embeddings
 
 
@@ -203,7 +209,6 @@ async def upload_document(file: UploadFile = File(...)):
 
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
-        logger.warning("Failed upload attempt: unsupported file type '%s'", ext)
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
@@ -213,18 +218,14 @@ async def upload_document(file: UploadFile = File(...)):
 
     try:
         await run_in_threadpool(save_uploaded_file, file, file_path)
-
         async with store_lock:
             await run_in_threadpool(process_uploaded_file, file_path)
-
         return {"message": f"Successfully uploaded and indexed '{filename}'."}
-
     except Exception as e:
         logger.exception("Error processing upload for %s", filename)
         if file_path.exists():
             file_path.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=str(e))
-
     finally:
         await file.close()
 
@@ -232,12 +233,8 @@ async def upload_document(file: UploadFile = File(...)):
 @app.post("/query")
 async def query_document(req: QueryRequest):
     store = get_vector_store()
-
     if store is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No documents uploaded yet. Please upload a document first.",
-        )
+        raise HTTPException(status_code=400, detail="No documents uploaded yet. Please upload a document first.")
 
     question = req.question.strip()
     if not question:
@@ -245,27 +242,19 @@ async def query_document(req: QueryRequest):
 
     cache_key = f"{question.lower()}::k={max(1, min(req.k, 10))}"
     if cache_key in query_cache:
-        logger.info("Serving query from cache.")
         return query_cache[cache_key]
 
     try:
-        logger.info("Processing query: %s", question)
         qa_chain = get_qa_chain(store, k=req.k)
         res = await run_in_threadpool(invoke_chain, qa_chain, question)
 
         answer = res.get("answer", "")
         source_docs = res.get("source_documents", [])
-
         sources = [{"content": doc.page_content.strip()} for doc in source_docs]
 
-        payload = {
-            "answer": answer,
-            "sources": sources,
-        }
-
+        payload = {"answer": answer, "sources": sources}
         query_cache[cache_key] = payload
         return payload
-
     except Exception as e:
         logger.exception("Error during query processing")
         raise HTTPException(status_code=500, detail=str(e))
@@ -274,7 +263,6 @@ async def query_document(req: QueryRequest):
 @app.post("/query_stream")
 async def stream_query_document(req: QueryRequest):
     store = get_vector_store()
-
     if store is None:
         raise HTTPException(status_code=400, detail="No documents uploaded yet.")
 
@@ -297,10 +285,7 @@ Question: {question}
 
 Answer:"""
 
-    prompt = PromptTemplate(
-        template=prompt_template,
-        input_variables=["context", "question"],
-    )
+    prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 
     retriever = store.as_retriever(
         search_type="similarity",
@@ -315,7 +300,6 @@ Answer:"""
     )
 
     async def generate_response():
-        logger.info("Streaming response started...")
         async for chunk in chain.astream({"question": question}):
             if "answer" in chunk:
                 yield chunk["answer"]
