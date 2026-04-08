@@ -8,4 +8,4 @@ langchain-text-splitters==0.3.8
 faiss-cpu==1.13.2
 pypdf==4.3.1
 python-dotenv==1.0.1
-fastembed==0.3.6
+fastembed==0.8.0
